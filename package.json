@@ -1,0 +1,19 @@
+{
+  "name": "verified-document-vault",
+  "private": true,
+  "version": "0.1.0",
+  "workspaces": [
+    "apps/*",
+    "services/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "build": "npm run build --workspace @verified-document-vault/crypto-protocol && npm run build --workspace @verified-document-vault/api && npm run build --workspace @verified-document-vault/anchoring-worker && npm run build --workspace @verified-document-vault/web && npm run compile --prefix contracts",
+    "lint": "npm run typecheck --workspace @verified-document-vault/web && npm run build --workspace @verified-document-vault/api && npm run build --workspace @verified-document-vault/anchoring-worker && npm run compile --prefix contracts",
+    "test": "npm run test --workspaces --if-present && npm run test --prefix contracts && node --test research/tests/*.test.mjs && python3 -m unittest research.tests.test_dataset_summary research.tests.test_lightgbm_pipeline research.tests.test_rl_environment",
+    "dev:web": "npm run dev --workspace @verified-document-vault/web",
+    "dev:api": "npm run dev --workspace @verified-document-vault/api",
+    "smoke:compose": "node tests/compose-smoke.mjs",
+    "test:research:python": "python3 -m unittest research.tests.test_dataset_summary research.tests.test_lightgbm_pipeline research.tests.test_rl_environment"
+  }
+}

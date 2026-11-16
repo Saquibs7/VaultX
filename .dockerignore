@@ -1,0 +1,15 @@
+node_modules
+**/node_modules
+**/dist
+**/artifacts
+**/cache
+.git
+.env
+.env.*
+!.env.example
+research/data/collected
+research/reports/forecasting
+research/reports/rl
+__pycache__
+*.pyc
+coverage

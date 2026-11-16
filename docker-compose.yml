@@ -1,0 +1,108 @@
+services:
+  mongo:
+    image: mongo:7
+    restart: unless-stopped
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo-data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  hardhat:
+    build:
+      context: ./contracts
+    ports:
+      - "8545:8545"
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8545',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({jsonrpc:'2.0',id:1,method:'eth_chainId',params:[]})}).then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+
+  deploy-contract:
+    build:
+      context: ./contracts
+    depends_on:
+      hardhat:
+        condition: service_healthy
+    environment:
+      RPC_URL: http://hardhat:8545
+      DEPLOYMENT_FILE: /deployments/registry.json
+    volumes:
+      - contract-deployments:/deployments
+    command: ["npm", "run", "deploy:local"]
+    restart: "no"
+
+  api:
+    build:
+      context: .
+      dockerfile: services/api/Dockerfile
+    depends_on:
+      mongo:
+        condition: service_healthy
+      hardhat:
+        condition: service_healthy
+      deploy-contract:
+        condition: service_completed_successfully
+    environment:
+      NODE_ENV: development
+      PORT: 3000
+      FRONTEND_ORIGIN: http://localhost:8080
+      MONGODB_URI: mongodb://mongo:27017/verified_document_vault
+      RPC_URL: http://hardhat:8545
+      CHAIN_ID: 31337
+      DEPLOYMENT_FILE: /deployments/registry.json
+      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:-local-only-jwt-secret-change-before-production-0123456789}
+      DOCUMENT_ENCRYPTION_KEY: ${DOCUMENT_ENCRYPTION_KEY:-0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef}
+      DEMO_ISSUER_PASSWORD: ${DEMO_ISSUER_PASSWORD:-Password123!}
+      WORKER_API_KEY: ${WORKER_API_KEY:-local-worker-api-key-change-before-production-00000000}
+    ports:
+      - "3000:3000"
+    volumes:
+      - contract-deployments:/deployments:ro
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  anchoring-worker:
+    build:
+      context: .
+      dockerfile: services/anchoring-worker/Dockerfile
+    depends_on:
+      api:
+        condition: service_healthy
+      hardhat:
+        condition: service_healthy
+      deploy-contract:
+        condition: service_completed_successfully
+    environment:
+      API_URL: http://api:3000
+      WORKER_API_KEY: ${WORKER_API_KEY:-local-worker-api-key-change-before-production-00000000}
+      RPC_URL: http://hardhat:8545
+      PRIVATE_KEY: ${LOCAL_HARDHAT_PRIVATE_KEY:-ac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80}
+      DEPLOYMENT_FILE: /deployments/registry.json
+      POLL_INTERVAL_MS: 2000
+      BATCH_LIMIT: 20
+    volumes:
+      - contract-deployments:/deployments:ro
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+    depends_on:
+      api:
+        condition: service_healthy
+    ports:
+      - "8080:80"
+    restart: unless-stopped
+
+volumes:
+  mongo-data:
+  contract-deployments:
